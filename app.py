@@ -4,12 +4,10 @@ import os
 import logging
 import sys
 
-# --- FORCE SYSTEM LOGGING ---
 logging.basicConfig(level=logging.INFO, stream=sys.stdout,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# THE FIX: Added ping_interval=25 to prevent Render from killing the connection!
 sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*', ping_timeout=60, ping_interval=25)
 app = web.Application()
 sio.attach(app)
@@ -33,12 +31,15 @@ async def handle_join(sid, frequency):
     for room in rooms:
         if room != sid:
             await sio.leave_room(sid, room)
-            
     await sio.enter_room(sid, freq_str)
     logger.info(f"[ROOM] User {sid} securely locked into Frequency: {freq_str}")
 
 @sio.on('voice_data')
 async def handle_voice(sid, data):
+    # THE FIX: Since we are sending Base64 strings, throw away any raw binary
+    if not isinstance(data, str):
+        return 
+
     rooms = sio.rooms(sid)
     for freq in rooms:
         if freq != sid:
@@ -47,5 +48,4 @@ async def handle_voice(sid, data):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     logger.info(f"🚀 SERVER AWAKE ON PORT {port} 🚀")
-    # THE FIX: Explicitly bind to 0.0.0.0 so Render's Health Check can see the app!
     web.run_app(app, host='0.0.0.0', port=port)
