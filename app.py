@@ -4,7 +4,7 @@ import os
 import logging
 import sys
 
-# --- FORCE SYSTEM LOGGING (Bypasses the async black hole) ---
+# --- FORCE SYSTEM LOGGING ---
 logging.basicConfig(level=logging.INFO, stream=sys.stdout,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -27,8 +27,15 @@ async def disconnect(sid):
 
 @sio.on('join_frequency')
 async def handle_join(sid, frequency):
-    sio.enter_room(sid, str(frequency))
-    logger.info(f"[ROOM] User {sid} locked into Frequency: {frequency}")
+    freq_str = str(frequency)
+    rooms = sio.rooms(sid)
+    for room in rooms:
+        if room != sid:
+            # THE BUG WAS HERE: We must AWAIT the room leaving/entering!
+            await sio.leave_room(sid, room)
+            
+    await sio.enter_room(sid, freq_str)
+    logger.info(f"[ROOM] User {sid} securely locked into Frequency: {freq_str}")
 
 @sio.on('voice_data')
 async def handle_voice(sid, data):
