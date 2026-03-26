@@ -9,7 +9,8 @@ logging.basicConfig(level=logging.INFO, stream=sys.stdout,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
+# THE FIX: Added ping_interval=25 to prevent Render from killing the connection!
+sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*', ping_timeout=60, ping_interval=25)
 app = web.Application()
 sio.attach(app)
 
@@ -31,7 +32,6 @@ async def handle_join(sid, frequency):
     rooms = sio.rooms(sid)
     for room in rooms:
         if room != sid:
-            # THE BUG WAS HERE: We must AWAIT the room leaving/entering!
             await sio.leave_room(sid, room)
             
     await sio.enter_room(sid, freq_str)
@@ -39,7 +39,6 @@ async def handle_join(sid, frequency):
 
 @sio.on('voice_data')
 async def handle_voice(sid, data):
-    logger.info(f"[AUDIO] Server received data from {sid}, routing to others...")
     rooms = sio.rooms(sid)
     for freq in rooms:
         if freq != sid:
@@ -48,4 +47,5 @@ async def handle_voice(sid, data):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     logger.info(f"🚀 SERVER AWAKE ON PORT {port} 🚀")
-    web.run_app(app, port=port)
+    # THE FIX: Explicitly bind to 0.0.0.0 so Render's Health Check can see the app!
+    web.run_app(app, host='0.0.0.0', port=port)
