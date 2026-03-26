@@ -11,7 +11,7 @@ packet_counters = {}
 
 @sio.event
 async def connect(sid, environ):
-    print(f">>> [NETWORK] User connected: {sid}")
+    print(f">>> [NETWORK] Users connected: {sid}")
 
 @sio.event
 async def disconnect(sid):
