@@ -6,23 +6,32 @@ sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
 app = web.Application()
 sio.attach(app)
 
-# Track how many people are talking on each frequency
-# Format: { "100.5": 2 }
 active_talkers = {}
+packet_counters = {}
+
+@sio.event
+async def connect(sid, environ):
+    print(f">>> [NETWORK] User connected: {sid}")
+
+@sio.event
+async def disconnect(sid):
+    print(f"<<< [NETWORK] User disconnected: {sid}")
 
 @sio.on('join_frequency')
 async def handle_join(sid, frequency):
+    freq_str = str(frequency)
     rooms = sio.rooms(sid)
     for room in rooms:
         if room != sid:
             sio.leave_room(sid, room)
-    sio.enter_room(sid, str(frequency))
+    sio.enter_room(sid, freq_str)
+    print(f"[ROOM] User {sid} locked into Frequency: {freq_str}")
 
 @sio.on('start_talking')
 async def start_talking(sid, frequency):
     freq = str(frequency)
     active_talkers[freq] = active_talkers.get(freq, 0) + 1
-    # If more than 1 person is talking, tell everyone on that frequency to BEEP
+    print(f"[MIC OPEN] {sid} talking on {freq}. Total talkers: {active_talkers[freq]}")
     if active_talkers[freq] > 1:
         await sio.emit('collision', True, room=freq)
 
@@ -30,14 +39,21 @@ async def start_talking(sid, frequency):
 async def stop_talking(sid, frequency):
     freq = str(frequency)
     active_talkers[freq] = max(0, active_talkers.get(freq, 1) - 1)
+    print(f"[MIC CLOSED] {sid} stopped. Total talkers: {active_talkers[freq]}")
     if active_talkers[freq] <= 1:
         await sio.emit('collision', False, room=freq)
 
 @sio.on('voice_data')
 async def handle_voice(sid, data):
+    # Track packets so we know the server is receiving them
+    packet_counters[sid] = packet_counters.get(sid, 0) + 1
+    if packet_counters[sid] % 10 == 0:
+        print(f"[AUDIO TRACE] Server received 10 packets from {sid}...")
+
     rooms = sio.rooms(sid)
     for freq in rooms:
         if freq != sid:
+            # RELAY THE AUDIO TO EVERYONE ELSE IN THE ROOM
             await sio.emit('voice_receive', data, room=freq, skip_sid=sid)
 
 if __name__ == '__main__':
